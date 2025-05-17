@@ -8,6 +8,7 @@ import android.os.Build
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.core.os.postDelayed
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
@@ -24,6 +25,7 @@ import io.legado.app.ui.book.read.page.entities.column.ImageColumn
 import io.legado.app.ui.book.read.page.entities.column.ReviewColumn
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.utils.RealPathUtil
+import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fastSum
 import io.legado.app.utils.isContentScheme
@@ -143,6 +145,12 @@ object ChapterProvider {
 
     @JvmStatic
     var visibleRect = RectF()
+
+    private val handler by lazy {
+        buildMainHandler()
+    }
+
+    private var upViewSizeRunnable: Runnable? = null
 
     init {
         upStyle()
@@ -359,10 +367,46 @@ object ChapterProvider {
             }
             var height = size.height
             var width = size.width
-            when (imageStyle?.toUpperCase(Locale.ROOT)) {
+            when (imageStyle?.uppercase(Locale.ROOT)) {
                 Book.imgStyleFull -> {
                     width = visibleWidth
                     height = size.height * visibleWidth / size.width
+                }
+
+                Book.imgStyleSingle -> {
+                    width = visibleWidth
+                    height = size.height * visibleWidth / size.width
+                    if (height > visibleHeight) {
+                        width = width * visibleHeight / height
+                        height = visibleHeight
+                    }
+                    if (durY > 0f) {
+                        val textPage = textPages.last()
+                        if (doublePage && absStartX < viewWidth / 2) {
+                            //当前页面左列结束
+                            textPage.leftLineSize = textPage.lineSize
+                            absStartX = viewWidth / 2 + paddingLeft
+                        } else {
+                            //当前页面结束
+                            if (textPage.leftLineSize == 0) {
+                                textPage.leftLineSize = textPage.lineSize
+                            }
+                            textPage.text = stringBuilder.toString().ifEmpty { "本页无文字内容" }
+                            stringBuilder.clear()
+                            textPages.add(TextPage())
+                        }
+                        // 双页的 durY 不正确，可能会小于实际高度
+                        if (textPage.height < durY) {
+                            textPage.height = durY
+                        }
+                        durY = 0f
+                    }
+
+                    // 图片竖直方向居中：调整 Y 坐标
+                    if (height < visibleHeight) {
+                        val adjustHeight = (visibleHeight - height) / 2f
+                        durY = adjustHeight // 将 Y 坐标设置为居中位置
+                    }
                 }
 
                 else -> {
@@ -437,7 +481,10 @@ object ChapterProvider {
     ): Pair<Int, Float> {
         var absStartX = x
         val layout = if (ReadBookConfig.useZhLayout) {
-            ZhLayout(text, textPaint, visibleWidth, emptyList(), emptyList())
+            ZhLayout(
+                text, textPaint, visibleWidth, emptyList(), emptyList(),
+                ReadBookConfig.paragraphIndent.length
+            )
         } else {
             StaticLayout(text, textPaint, visibleWidth, Layout.Alignment.ALIGN_NORMAL, 0f, 0f, true)
         }
@@ -569,7 +616,9 @@ object ChapterProvider {
         sbLength: Int
     ) {
         val lastLine = textPages.last().lines.lastOrNull { it.paragraphNum > 0 }
-            ?: textPages.getOrNull(textPages.lastIndex - 1)?.lines?.lastOrNull { it.paragraphNum > 0 }
+            ?: textPages.getOrNull(
+                textPages.lastIndex - 1
+            )?.lines?.lastOrNull { it.paragraphNum > 0 }
         val paragraphNum = when {
             lastLine == null -> 1
             lastLine.isParagraphEnd -> lastLine.paragraphNum + 1
@@ -815,7 +864,15 @@ object ChapterProvider {
         titleTopSpacing = ReadBookConfig.titleTopSpacing.dpToPx()
         titleBottomSpacing = ReadBookConfig.titleBottomSpacing.dpToPx()
         val bodyIndent = ReadBookConfig.paragraphIndent
-        indentCharWidth = StaticLayout.getDesiredWidth(bodyIndent, contentPaint) / bodyIndent.length
+        indentCharWidth = if (bodyIndent.isNotEmpty()) {
+            var indentWidth = StaticLayout.getDesiredWidth(bodyIndent, contentPaint)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                indentWidth += contentPaint.letterSpacing * contentPaint.textSize
+            }
+            indentWidth / bodyIndent.length
+        } else {
+            0f
+        }
         titlePaintTextHeight = titlePaint.textHeight
         contentPaintTextHeight = contentPaint.textHeight
         titlePaintFontMetrics = titlePaint.fontMetrics
@@ -901,12 +958,29 @@ object ChapterProvider {
      * 更新View尺寸
      */
     fun upViewSize(width: Int, height: Int) {
-        if (width > 0 && height > 0 && (width != viewWidth || height != viewHeight)) {
-            viewWidth = width
-            viewHeight = height
-            upLayout()
-            postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+        if (width <= 0 || height <= 0) {
+            return
         }
+        if (width != viewWidth || height != viewHeight) {
+            if (width == viewWidth) {
+                upViewSizeRunnable = handler.postDelayed(300) {
+                    upViewSizeRunnable = null
+                    notifyViewSizeChange(width, height)
+                }
+            } else {
+                notifyViewSizeChange(width, height)
+            }
+        } else if (upViewSizeRunnable != null) {
+            handler.removeCallbacks(upViewSizeRunnable!!)
+            upViewSizeRunnable = null
+        }
+    }
+
+    private fun notifyViewSizeChange(width: Int, height: Int) {
+        viewWidth = width
+        viewHeight = height
+        upLayout()
+        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
     }
 
     /**
