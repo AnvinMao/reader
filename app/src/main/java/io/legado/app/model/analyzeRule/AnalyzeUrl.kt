@@ -38,9 +38,7 @@ import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.postForm
 import io.legado.app.help.http.postJson
 import io.legado.app.help.http.postMultipart
-import io.legado.app.help.source.copy
 import io.legado.app.help.source.getShareScope
-import io.legado.app.model.Debug
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -226,32 +224,32 @@ class AnalyzeUrl(
             if (urlOption == null) {
                 urlOption = GSON.fromJsonObject<UrlOption>(urlOptionStr).getOrNull()
                 if (urlOption != null) {
-                    Debug.log("≡链接参数 JSON 格式不规范，请改为规范格式")
+                    log("链接参数 JSON 格式不规范，请改为规范格式")
                 }
             }
             urlOption?.let { option ->
-                    option.getMethod()?.let {
-                        if (it.equals("POST", true)) method = RequestMethod.POST
-                    }
-                    option.getHeaderMap()?.forEach { entry ->
-                        headerMap[entry.key.toString()] = entry.value.toString()
-                    }
-                    option.getBody()?.let {
-                        body = it
-                    }
-                    type = option.getType()
-                    charset = option.getCharset()
-                    retry = option.getRetry()
-                    useWebView = option.useWebView()
-                    webJs = option.getWebJs()
-                    option.getJs()?.let { jsStr ->
-                        evalJS(jsStr, url)?.toString()?.let {
-                            url = it
-                        }
-                    }
-                    serverID = option.getServerID()
-                    webViewDelayTime = max(0, option.getWebViewDelayTime() ?: 0)
+                option.getMethod()?.let {
+                    if (it.equals("POST", true)) method = RequestMethod.POST
                 }
+                option.getHeaderMap()?.forEach { entry ->
+                    headerMap[entry.key.toString()] = entry.value.toString()
+                }
+                option.getBody()?.let {
+                    body = it
+                }
+                type = option.getType()
+                charset = option.getCharset()
+                retry = option.getRetry()
+                useWebView = option.useWebView()
+                webJs = option.getWebJs()
+                option.getJs()?.let { jsStr ->
+                    evalJS(jsStr, url)?.toString()?.let {
+                        url = it
+                    }
+                }
+                serverID = option.getServerID()
+                webViewDelayTime = max(0, option.getWebViewDelayTime() ?: 0)
+            }
         }
         urlNoQuery = url
         when (method) {
@@ -357,7 +355,7 @@ class AnalyzeUrl(
             bindings["speakText"] = speakText
             bindings["speakSpeed"] = speakSpeed
             bindings["book"] = ruleData as? Book
-            bindings["source"] = source?.copy()
+            bindings["source"] = source
             bindings["result"] = result
         }
         val sharedScope = source?.getShareScope(coroutineContext)
@@ -459,7 +457,7 @@ class AnalyzeUrl(
                         else -> get(urlNoQuery, encodedQuery)
                     }
                 }.let {
-                    val isXml = it.raw.body?.contentType()?.toString()
+                    val isXml = it.raw.body.contentType()?.toString()
                         ?.matches(AppPattern.xmlContentTypeRegex) == true
                     if (isXml && it.body?.trim()?.startsWith("<?xml", true) == false) {
                         StrResponse(it.raw, "<?xml version=\"1.0\"?>" + it.body)
@@ -554,7 +552,7 @@ class AnalyzeUrl(
         getByteArrayIfDataUri()?.let {
             return it
         }
-        return getResponseAwait().body!!.bytes()
+        return getResponseAwait().body.bytes()
     }
 
     fun getByteArray(): ByteArray {
@@ -570,7 +568,7 @@ class AnalyzeUrl(
         getByteArrayIfDataUri()?.let {
             return ByteArrayInputStream(it)
         }
-        return getResponseAwait().body!!.byteStream()
+        return getResponseAwait().body.byteStream()
     }
 
     fun getInputStream(): InputStream {
@@ -660,7 +658,7 @@ class AnalyzeUrl(
     }
 
     override fun getSource(): BaseSource? {
-        return source?.copy()
+        return source
     }
 
     companion object {

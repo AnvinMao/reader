@@ -17,6 +17,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.ContentEditDialog
 import io.legado.app.ui.book.read.page.api.DataSource
 import io.legado.app.ui.book.read.page.delegate.CoverPageDelegate
@@ -28,6 +29,7 @@ import io.legado.app.ui.book.read.page.delegate.SimulationPageDelegate
 import io.legado.app.ui.book.read.page.delegate.SlidePageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.entities.TextChapter
+import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.TextPos
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
@@ -305,6 +307,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
             invalidate()
         }
         pageDelegate?.onScroll()
+        val offset = touchY - lastY
+        touchY -= offset - offset.toInt()
     }
 
     /**
@@ -450,6 +454,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 { progress -> callBack.sureNewProgress(progress) },
                 { context.longToastOnUi(context.getString(R.string.upload_book_success)) },
                 { context.longToastOnUi(context.getString(R.string.sync_book_progress_success)) })
+
+            13 -> {
+                if (BaseReadAloudService.isPlay()) {
+                    ReadAloud.pause(context)
+                } else {
+                    ReadAloud.resume(context)
+                }
+            }
         }
     }
 
@@ -663,8 +675,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
         return curPage.getCurVisiblePage()
     }
 
-    fun getCurPagePosition(): Int {
-        return curPage.getCurVisibleFirstLine()?.pagePosition ?: 0
+    fun getCurVisibleFirstLine(): TextLine? {
+        return curPage.getCurVisibleFirstLine()
     }
 
     fun invalidateTextPage() {
